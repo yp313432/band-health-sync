@@ -31,6 +31,15 @@ jobs:
           if source.count(original) != 1:
               raise SystemExit("Unexpected application ID")
           path.write_text(source.replace(original, 'applicationId "nodomain.freeyourgadget.gadgetbridge.toge.band11metrics"'))
+
+          resources = Path("app/src/mainline/res/values/strings.xml")
+          values = resources.read_text(encoding="utf-8")
+          authority = "com.getpebble.android.provider.toge"
+          if values.count(authority) != 1:
+              raise SystemExit("Unexpected content provider authority")
+          values = values.replace(authority, authority + ".band11metrics")
+          values = values.replace('name="app_name">健康数据<', 'name="app_name">健康数据试装版<')
+          resources.write_text(values, encoding="utf-8")
           PY
       - name: Build and verify signed test APK
         run: |
@@ -38,6 +47,7 @@ jobs:
           mkdir -p install
           cp app/build/outputs/apk/mainline/debug/app-mainline-debug.apk install/band11-health-sync-test.apk
           "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify install/band11-health-sync-test.apk
+          "$ANDROID_HOME/build-tools/37.0.0/aapt" dump xmltree install/band11-health-sync-test.apk AndroidManifest.xml | grep -F "com.getpebble.android.provider.toge.band11metrics"
       - uses: actions/upload-artifact@v4
         with:
           name: band11-health-sync-test
