@@ -47,7 +47,10 @@ jobs:
           mkdir -p install
           cp app/build/outputs/apk/mainline/debug/app-mainline-debug.apk install/band11-health-sync-test.apk
           "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify install/band11-health-sync-test.apk
-          "$ANDROID_HOME/build-tools/37.0.0/aapt" dump xmltree install/band11-health-sync-test.apk AndroidManifest.xml | grep -F "com.getpebble.android.provider.toge.band11metrics"
+          "$ANDROID_HOME/build-tools/37.0.0/aapt" dump badging install/band11-health-sync-test.apk > install/badging.txt
+          grep -F "package: name='nodomain.freeyourgadget.gadgetbridge.toge.band11metrics'" install/badging.txt
+          "$ANDROID_HOME/build-tools/37.0.0/aapt" dump --values resources install/band11-health-sync-test.apk > install/resources.txt
+          grep -F "com.getpebble.android.provider.toge.band11metrics" install/resources.txt
       - uses: actions/upload-artifact@v4
         with:
           name: band11-health-sync-test
