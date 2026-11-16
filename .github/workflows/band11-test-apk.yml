@@ -1,0 +1,47 @@
+name: Build Band 11 test APK
+
+on:
+  push:
+    branches: [codex/band11-extended-metrics]
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android SDK components
+        run: sdkmanager --channel=3 'platforms;android-37' 'build-tools;37.0.0'
+      - name: Give the test build its own Android package name
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("app/build.gradle")
+          source = path.read_text()
+          original = 'applicationId "nodomain.freeyourgadget.gadgetbridge.toge"'
+          if source.count(original) != 1:
+              raise SystemExit("Unexpected application ID")
+          path.write_text(source.replace(original, 'applicationId "nodomain.freeyourgadget.gadgetbridge.toge.band11metrics"'))
+          PY
+      - name: Build and verify signed test APK
+        run: |
+          bash gradlew --no-daemon :app:assembleMainlineDebug
+          mkdir -p install
+          cp app/build/outputs/apk/mainline/debug/app-mainline-debug.apk install/band11-health-sync-test.apk
+          "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify install/band11-health-sync-test.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: band11-health-sync-test
+          path: install/band11-health-sync-test.apk
+          if-no-files-found: error

@@ -112,10 +112,11 @@ class SelfHostedHealthSyncWorker(
             try {
                 samples = readSamples(device, windowStart, now)
                 val legacy = SelfHostedHealthPayload.build(samples, zone, sleepCursor, now)
-                payload = SelfHostedWorkoutSync.attach(
+                val withWorkouts = SelfHostedWorkoutSync.attach(
                     legacy, { SelfHostedWorkoutReader.read(device, windowStart, now) }, zone, now,
                     prefs.getBoolean(GBPrefs.SELF_HOSTED_HEALTH_WORKOUTS_ENABLED, false)
                 )
+                payload = SelfHostedMetricSync.attach(withWorkouts, device, windowStart, now, zone)
             } catch (e: Exception) {
                 LOG.error("Could not prepare self-hosted health payload for {}", address, e)
                 failure = e.message ?: e.javaClass.simpleName
@@ -129,12 +130,13 @@ class SelfHostedHealthSyncWorker(
             )
 
             var allSucceeded = true
+            val uploadedDates = mutableSetOf<String>()
             for (day in payload.days) {
                 val result = uploader.upload(url, token, day.body.toString())
                 // Logged whether it succeeded or failed: the point of the log is to see the failures.
                 logEntries.add(logEntry(day, deviceName, url, manual, result))
                 when (result) {
-                    is SelfHostedHealthUploadResult.Success -> uploadedDays++
+                    is SelfHostedHealthUploadResult.Success -> uploadedDates.add(day.date)
                     is SelfHostedHealthUploadResult.Failure -> {
                         LOG.warn("Upload of {} failed: {}", day.date, result.message)
                         allSucceeded = false
@@ -146,6 +148,8 @@ class SelfHostedHealthSyncWorker(
                     }
                 }
             }
+
+            uploadedDays += uploadedDates.size
 
             // Cursors move only on a clean run for this device. Steps and heart rate are safe to
             // re-send, and a sleep session that was not confirmed must stay eligible.
@@ -244,10 +248,11 @@ class SelfHostedHealthSyncWorker(
         payload = prettyPayload(day.body)
     )
 
-    /** Steps count as one record; each heart-rate point, sleep session and workout counts on its own. */
+    /** Steps count as one record; each sample, sleep session and workout counts on its own. */
     private fun countRecords(body: JSONObject): Int {
         var count = if (body.has("steps")) 1 else 0
         count += body.optJSONArray("heart_rate")?.length() ?: 0
+        count += body.optJSONArray("metrics")?.length() ?: 0
         count += body.optJSONArray("sleep")?.length() ?: 0
         count += body.optJSONArray("workouts")?.length() ?: 0
         return count
